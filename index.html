@@ -76,6 +76,23 @@
   }
   body.idle #help { opacity: 0; }
 
+  #toast {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    z-index: 6;
+    background: rgba(0,0,0,0.82);
+    color: #fff;
+    font: 13px/1 system-ui, sans-serif;
+    padding: 9px 14px;
+    border-radius: 999px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
   /* brat mode — lime green cover */
   body.brat { background: #8ace00 !important; }
   body.brat #message { color: #000000 !important; caret-color: #000000; }
@@ -86,7 +103,8 @@
   <div id="stage">
     <div id="message" contenteditable="true" autofocus spellcheck="false"></div>
   </div>
-  <div id="help">type &nbsp;·&nbsp; <b>Tab</b> fullscreen &nbsp;·&nbsp; <b>⌘/Ctrl+B</b> brat &nbsp;·&nbsp; <b>⌘/Ctrl+↵</b> invert &nbsp;·&nbsp; <b>⌘/Ctrl+K</b> blur &nbsp;·&nbsp; <b>Esc</b> clear</div>
+  <div id="toast"></div>
+  <div id="help">type &nbsp;·&nbsp; <b>Tab</b> fullscreen &nbsp;·&nbsp; <b>⌘/Ctrl+B</b> brat &nbsp;·&nbsp; <b>⌘/Ctrl+↵</b> invert &nbsp;·&nbsp; <b>⌘/Ctrl+K</b> blur &nbsp;·&nbsp; <b>⌘/Ctrl+S</b> save webp &nbsp;·&nbsp; <b>Esc</b> clear</div>
 
 <script>
   const stage = document.getElementById('stage');
@@ -150,6 +168,9 @@
       e.preventDefault();
       blurOn = !blurOn;
       document.documentElement.style.setProperty('--blur', blurOn ? '2px' : '0px');
+    } else if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault();
+      exportImage();
     }
   });
 
@@ -159,6 +180,128 @@
     } else {
       document.exitFullscreen?.();
     }
+  }
+
+  // ---- High-quality WebP export ----------------------------------------
+  // Re-renders the cover onto a large square canvas so it's crisp regardless
+  // of screen size, reproducing the bratgenerator-style justified layout
+  // (incl. justified last line) and the blur.
+  const EXPORT_SIZE = 2048;        // output px (square)
+  const EXPORT_MARGIN = 0.05;      // inner padding as fraction of size
+
+  function exportImage() {
+    const size = EXPORT_SIZE;
+    const margin = Math.round(size * EXPORT_MARGIN);
+    const inner = size - margin * 2;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // Colors & font from the current live state
+    const ms = getComputedStyle(msg);
+    const bg = getComputedStyle(document.body).backgroundColor;
+    const fg = ms.color;
+    const weight = ms.fontWeight || '500';
+    const family = '"Arial Narrow", Arial, sans-serif';
+    const LH = 0.9;                 // matches CSS line-height
+
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, size, size);
+
+    const text = (msg.textContent || '').replace(/\s+/g, ' ').trim();
+    const words = text ? text.split(' ') : [];
+
+    if (words.length) {
+      // Greedy word-wrap at a given font size; returns lines + metrics.
+      const wrap = (fontPx) => {
+        ctx.font = `${weight} ${fontPx}px ${family}`;
+        const sp = ctx.measureText(' ').width;
+        const lines = [];
+        let cur = [], curW = 0, maxWord = 0;
+        for (const w of words) {
+          const ww = ctx.measureText(w).width;
+          if (ww > maxWord) maxWord = ww;
+          if (!cur.length) { cur = [w]; curW = ww; continue; }
+          const next = curW + sp + ww;
+          if (next <= inner) { cur.push(w); curW = next; }
+          else { lines.push(cur); cur = [w]; curW = ww; }
+        }
+        if (cur.length) lines.push(cur);
+        return { lines, maxWord, height: lines.length * fontPx * LH, sp };
+      };
+
+      // Binary-search the largest font that fits the square.
+      let lo = 8, hi = 4000, best = 8, layout = null;
+      for (let i = 0; i < 24; i++) {
+        const mid = (lo + hi) / 2;
+        const L = wrap(mid);
+        if (L.maxWord <= inner && L.height <= inner) { best = mid; layout = L; lo = mid; }
+        else hi = mid;
+      }
+      const fontPx = best;
+      const { lines, sp } = layout || wrap(best);
+
+      // Draw — justified on every line, including the last (text-align-last).
+      ctx.font = `${weight} ${fontPx}px ${family}`;
+      ctx.fillStyle = fg;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+
+      const stageW = stage.clientWidth || 700;
+      ctx.filter = blurOn ? `blur(${(2 * size / stageW).toFixed(2)}px)` : 'none';
+
+      const lineH = fontPx * LH;
+      let y = margin + (inner - lines.length * lineH) / 2;
+
+      for (const lineWords of lines) {
+        if (lineWords.length === 1) {
+          ctx.fillText(lineWords[0], margin, y);     // single word: left (CSS justify)
+        } else {
+          let natural = 0;
+          for (const w of lineWords) natural += ctx.measureText(w).width;
+          const gap = (inner - natural) / (lineWords.length - 1);
+          let x = margin;
+          for (const w of lineWords) {
+            ctx.fillText(w, x, y);
+            x += ctx.measureText(w).width + gap;
+          }
+        }
+        y += lineH;
+      }
+      ctx.filter = 'none';
+    }
+
+    const base = slugify(text) || 'brat';
+    canvas.toBlob((blob) => {
+      if (!blob) { toast('export failed'); return; }
+      const webp = blob.type === 'image/webp';
+      download(blob, base + (webp ? '.webp' : '.png'));
+      toast('saved ' + base + (webp ? '.webp' : '.png') + '  ·  ' + size + '×' + size);
+    }, 'image/webp', 0.98);
+  }
+
+  function slugify(s) {
+    return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
+  }
+
+  function download(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  let toastTimer;
+  function toast(text) {
+    const el = document.getElementById('toast');
+    el.textContent = text;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
   }
 
   // Auto-hide the help bar when idle.
