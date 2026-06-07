@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Live Message</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #000000;
+    --blur: 2px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    cursor: default;
+    -webkit-font-smoothing: antialiased;
+    transition: background 0.15s ease;
+  }
+
+  /* Square "cover" area, centered on screen */
+  #stage {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    width: 90vmin;
+    height: 90vmin;
+    display: flex;
+    align-items: center;     /* vertical-center the text block */
+    justify-content: center;
+  }
+
+  /* The live text — justified like bratgenerator */
+  #message {
+    width: 100%;
+    color: var(--fg);
+    font-weight: 500;
+    font-family: "Arial Narrow", Arial, sans-serif;
+    font-size: 100px;                 /* JS overrides this to fit */
+    line-height: 0.9;
+    text-align: justify;
+    text-align-last: justify;         /* last line spreads too — the brat look */
+    word-spacing: 0;
+    overflow-wrap: normal;            /* keep words whole; shrink font instead */
+    word-break: normal;
+    white-space: normal;
+    outline: none;
+    caret-color: var(--fg);
+    filter: blur(var(--blur));
+  }
+
+  #message:empty::before {
+    content: "type…";
+    opacity: 0.18;
+  }
+
+  #help {
+    position: fixed;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    font: 13px/1.4 system-ui, sans-serif;
+    color: var(--fg);
+    opacity: 0.35;
+    text-align: center;
+    user-select: none;
+    transition: opacity 0.6s ease;
+    white-space: nowrap;
+  }
+  body.idle #help { opacity: 0; }
+
+  /* brat mode — lime green cover */
+  body.brat { background: #8ace00 !important; }
+  body.brat #message { color: #000000 !important; caret-color: #000000; }
+  body.brat #message:empty::before { content: "brat"; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div id="message" contenteditable="true" autofocus spellcheck="false"></div>
+  </div>
+  <div id="help">type &nbsp;·&nbsp; <b>Tab</b> fullscreen &nbsp;·&nbsp; <b>⌘/Ctrl+B</b> brat &nbsp;·&nbsp; <b>⌘/Ctrl+↵</b> invert &nbsp;·&nbsp; <b>⌘/Ctrl+K</b> blur &nbsp;·&nbsp; <b>Esc</b> clear</div>
+
+<script>
+  const stage = document.getElementById('stage');
+  const msg   = document.getElementById('message');
+
+  // Scale the text so the block fills the square box — biggest size that
+  // still fits both width (no word overflow) and height (no clipping).
+  const MAX = 1600, MIN = 12;
+  function fit() {
+    let lo = MIN, hi = MAX, best = MIN;
+    for (let i = 0; i < 16; i++) {
+      const mid = (lo + hi) / 2;
+      msg.style.fontSize = mid + 'px';
+      if (msg.scrollWidth <= stage.clientWidth + 1 &&
+          msg.scrollHeight <= stage.clientHeight + 1) {
+        best = mid; lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    msg.style.fontSize = best + 'px';
+  }
+  msg.addEventListener('input', fit);
+  window.addEventListener('resize', fit);
+
+  // Keep focus on the text so you can just start typing.
+  function focusMsg() {
+    msg.focus();
+    const r = document.createRange();
+    r.selectNodeContents(msg);
+    r.collapse(false);
+    const s = getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+  }
+  document.addEventListener('mousedown', (e) => {
+    if (e.target !== msg) { e.preventDefault(); focusMsg(); }
+  });
+  window.addEventListener('load', () => { focusMsg(); fit(); });
+
+  // Shortcuts (non-letter / modified keys so they don't clash with typing)
+  let inverted = false, blurOn = true;
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      msg.textContent = '';
+      fit();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      inverted = !inverted;
+      document.documentElement.style.setProperty('--bg', inverted ? '#000000' : '#ffffff');
+      document.documentElement.style.setProperty('--fg', inverted ? '#ffffff' : '#000000');
+    } else if ((e.metaKey || e.ctrlKey) && (e.key === 'b' || e.key === 'B')) {
+      e.preventDefault();
+      document.body.classList.toggle('brat');
+      fit();
+    } else if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      blurOn = !blurOn;
+      document.documentElement.style.setProperty('--blur', blurOn ? '2px' : '0px');
+    }
+  });
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
+    }
+  }
+
+  // Auto-hide the help bar when idle.
+  let idleTimer;
+  function poke() {
+    document.body.classList.remove('idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => document.body.classList.add('idle'), 2500);
+  }
+  ['mousemove', 'keydown', 'input'].forEach(ev => document.addEventListener(ev, poke));
+  poke();
+
+  fit();
+</script>
+</body>
+</html>
