@@ -128,6 +128,12 @@
     msg.style.fontSize = best + 'px';
   }
   msg.addEventListener('input', fit);
+  // Paste as plain text — rich HTML would break the layout and export.
+  msg.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+    document.execCommand('insertText', false, text);
+  });
   window.addEventListener('resize', fit);
 
   // Keep focus on the text so you can just start typing.
@@ -150,6 +156,7 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       e.preventDefault();
+      if (document.fullscreenElement) return;  // Esc exits fullscreen; don't also clear
       msg.textContent = '';
       fit();
     } else if (e.key === 'Tab') {
@@ -211,7 +218,7 @@
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, size, size);
 
-    const text = (msg.textContent || '').replace(/\s+/g, ' ').trim();
+    const text = (msg.innerText || '').replace(/\s+/g, ' ').trim();
     const words = text ? text.split(' ') : [];
 
     if (words.length) {
