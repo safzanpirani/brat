@@ -4,7 +4,8 @@ A dead-simple, fullscreen **live message** webapp — type and it fills the scre
 
 - Auto-fits text to a square box (scales font down as you type more)
 - **bratgenerator-style** justified spacing (`text-align-last: justify`) + blur
-- White / brat-green / inverted color modes
+- White / brat-green / inverted color modes, remembered across reloads
+- Installable — "Add to home screen" runs it fullscreen with no browser chrome
 - Self-hosted Arial Narrow so phones render the same face as desktop
 
 ## Mobile
@@ -22,5 +23,8 @@ Buttons ripple and spring, blur eases, and clearing blurs the text out.
 - `⌘/Ctrl + Enter` — invert
 - `⌘/Ctrl + K` — toggle blur
 - `Esc` — clear
+
+Enter is ignored on purpose: a cover is one justified block, and the export has
+no concept of a line break.
 
 It's a single static `index.html`, no build step. Deployed on Vercel → [brat.safzan.dev](https://brat.safzan.dev).

@@ -7,7 +7,17 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-<title>Live Message</title>
+<title>brat</title>
+<meta name="description" content="Type and it fills the screen, huge." />
+<link rel="icon" href="favicon.ico" sizes="any" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="manifest" href="manifest.webmanifest" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="brat" />
+<meta property="og:description" content="Type and it fills the screen, huge." />
+<meta property="og:image" content="https://brat.safzan.dev/og.png" />
+<meta property="og:url" content="https://brat.safzan.dev/" />
+<meta name="twitter:card" content="summary_large_image" />
 <style>
   /* Arial Narrow, self-hosted. Installed copies win via local(); phones,
      which ship no Arial Narrow at all, download the subset. */
@@ -216,6 +226,11 @@
                 transform .3s cubic-bezier(.22, 1.6, .36, 1);
   }
   #bar button:active { transform: scale(.86); }
+  #bar button, #eye { -webkit-touch-callout: none; }   /* no long-press menu */
+  #bar button:focus-visible,
+  #eye:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; opacity: 1; }
+
+  ::selection { background: rgba(127, 127, 127, .35); }
 
   @keyframes pop {
     0%   { transform: scale(1); }
@@ -282,7 +297,8 @@
 <body>
   <div id="stage">
     <div id="message" contenteditable="true" autofocus spellcheck="false"
-         autocorrect="off" autocapitalize="none" enterkeyhint="done"></div>
+         autocorrect="off" autocapitalize="none" enterkeyhint="done"
+         role="textbox" aria-multiline="false" aria-label="Message"></div>
   </div>
   <div id="toast"></div>
   <div id="flash"></div>
@@ -369,6 +385,13 @@
     fit();
   }
   document.addEventListener('fullscreenchange', () => { syncBar(); layout(); });
+  msg.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const text = e.dataTransfer?.getData('text/plain');
+    if (text) { focusMsg(); document.execCommand('insertText', false, text); fit(); }
+  });
+  msg.addEventListener('dragover', (e) => e.preventDefault());
+
   window.addEventListener('resize', layout);
   window.addEventListener('orientationchange', () => setTimeout(layout, 120));
   if (vv) {
@@ -445,34 +468,68 @@
   }
 
   // ---- Actions ----------------------------------------------------------
+  const STORE = 'brat:modes';
   let inverted = false, blurOn = true;
+
+  function save() {
+    try {
+      localStorage.setItem(STORE, JSON.stringify({
+        brat: document.body.classList.contains('brat'),
+        inverted, blurOn,
+      }));
+    } catch {}                      // private mode / blocked storage
+  }
+
+  function restore() {
+    let v = null;
+    try { v = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch {}
+    if (!v) { syncBar(); return; }
+    if (v.brat) document.body.classList.add('brat');
+    if (v.inverted) setInvert(true);
+    if (v.blurOn === false) setBlur(false);
+    syncBar();
+  }
 
   function setInvert(on) {
     inverted = on;
     document.documentElement.style.setProperty('--bg', on ? '#000000' : '#ffffff');
     document.documentElement.style.setProperty('--fg', on ? '#ffffff' : '#000000');
     syncBar();
+    save();
   }
   function setBlur(on) {
     blurOn = on;
     document.documentElement.style.setProperty('--blur', on ? '2px' : '0px');
     syncBar();
+    save();
   }
   function toggleBrat() {
     document.body.classList.toggle('brat');
     syncBar();
+    save();
     fit();
   }
+  // Wipe through execCommand so the browser's undo stack survives —
+  // setting textContent destroys it and Ctrl+Z can't bring the text back.
+  function wipe() {
+    try {
+      focusMsg();
+      document.execCommand('selectAll', false, null);
+      document.execCommand('delete', false, null);
+    } catch { msg.textContent = ''; }
+    if (msg.textContent) msg.textContent = '';
+  }
+
   function clearText() {
     if (reduceMotion || !msg.textContent) {
-      msg.textContent = '';
+      wipe();
       fit();
       return;
     }
     msg.classList.add('clearing');
     setTimeout(() => {
       msg.classList.remove('clearing');
-      msg.textContent = '';
+      wipe();
       fit();
       msg.classList.add('cleared');
       setTimeout(() => msg.classList.remove('cleared'), 360);
@@ -546,9 +603,14 @@
       e.preventDefault();
       if (document.fullscreenElement) return;  // Esc exits fullscreen; don't also clear
       clearText();
-    } else if (e.key === 'Tab') {
-      e.preventDefault();
-      toggleFullscreen();
+    } else if (e.key === 'Tab' && !e.shiftKey && document.activeElement === msg) {
+      e.preventDefault();          // only while typing; Tab still moves focus
+      toggleFullscreen();          // out of the text, so buttons stay reachable
+    } else if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();          // one justified block — the export has no
+                                   // concept of a line break either
+    } else if ((e.metaKey || e.ctrlKey) && ['i', 'I', 'u', 'U'].includes(e.key)) {
+      e.preventDefault();          // italic/underline would inject markup
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
       setInvert(!inverted);
@@ -725,7 +787,7 @@
   ['mousemove', 'keydown', 'input', 'touchstart'].forEach(ev => document.addEventListener(ev, poke));
   poke();
 
-  syncBar();
+  restore();
   layout();
 </script>
 </body>
