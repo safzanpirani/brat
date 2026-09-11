@@ -206,8 +206,8 @@
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   /* ---- Motion ----------------------------------------------------------
-     Colour modes wipe in as a circle from the button you tapped (View
-     Transitions); buttons spring and ripple; blur and clear animate. */
+     Buttons spring and ripple; blur, clear and save animate. Colour modes
+     switch instantly. */
   #bar button {
     position: relative;
     overflow: hidden;
@@ -263,13 +263,6 @@
   @keyframes flash {
     0%   { opacity: .9; }
     100% { opacity: 0; }
-  }
-
-  /* The circle wipe is driven from JS; kill the default crossfade. */
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation: none;
-    mix-blend-mode: normal;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -431,30 +424,6 @@
   // ---- Motion -----------------------------------------------------------
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // Run a colour change as a circular wipe growing from (x, y). View
-  // Transitions snapshot the old frame, so the whole cover — background, text
-  // colour, button colours — wipes as one piece instead of crossfading.
-  function reveal(fn, x, y) {
-    if (reduceMotion || !document.startViewTransition) { fn(); return; }
-
-    const w = window.innerWidth, h = window.innerHeight;
-    if (x == null) { x = w / 2; y = h / 2; }
-    // Radius out to the furthest corner, so the circle always covers the screen.
-    const r = Math.hypot(Math.max(x, w - x), Math.max(y, h - y));
-
-    const t = document.startViewTransition(fn);
-    t.ready.then(() => {
-      document.documentElement.animate(
-        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
-        {
-          duration: 560,
-          easing: 'cubic-bezier(.22, 1, .36, 1)',
-          pseudoElement: '::view-transition-new(root)',
-        }
-      );
-    }).catch(() => {});
-  }
-
   function ripple(btn, e) {
     if (reduceMotion) return;
     const r = btn.getBoundingClientRect();
@@ -489,12 +458,10 @@
     document.documentElement.style.setProperty('--blur', on ? '2px' : '0px');
     syncBar();
   }
-  function toggleBrat(x, y) {
-    reveal(() => {
-      document.body.classList.toggle('brat');
-      syncBar();
-      fit();
-    }, x, y);
+  function toggleBrat() {
+    document.body.classList.toggle('brat');
+    syncBar();
+    fit();
   }
   function clearText() {
     if (reduceMotion || !msg.textContent) {
@@ -545,11 +512,9 @@
     const btn = e.target.closest('button');
     if (!btn) return;
     e.preventDefault();
-    const r = btn.getBoundingClientRect();
-    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     pop(btn);
     switch (btn.dataset.act) {
-      case 'brat':   toggleBrat(cx, cy); break;
+      case 'brat':   toggleBrat(); break;
       case 'invert': setInvert(!inverted); break;
       case 'blur':   setBlur(!blurOn); break;
       case 'full':   toggleFullscreen(); break;

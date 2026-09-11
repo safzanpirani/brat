@@ -14,8 +14,7 @@ Tap anywhere to start typing. Save goes through the native share sheet. The
 eye in the top right hides the controls for a clean shot; the chrome also fades
 on its own after a couple of idle seconds and comes back on any tap.
 
-brat wipes in as a circle from the button you pressed, buttons ripple
-and spring, blur eases, and clearing blurs the text out.
+Buttons ripple and spring, blur eases, and clearing blurs the text out.
 
 ## Shortcuts
 - `Tab` — fullscreen
