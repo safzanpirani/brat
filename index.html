@@ -120,6 +120,53 @@
   body.touch #bar { display: flex; }
   body.touch #help { display: none; }
 
+  /* Hide/show toggle, top right. Fades out with the rest of the chrome when
+     idle; any tap brings it back. */
+  #eye {
+    position: fixed;
+    top: calc(12px + env(safe-area-inset-top));
+    right: calc(12px + env(safe-area-inset-right));
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(127, 127, 127, 0.16);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: var(--fg);
+    opacity: .55;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+    transition: opacity .45s ease, transform .3s cubic-bezier(.22, 1.6, .36, 1), background .25s ease;
+  }
+  #eye:active { transform: scale(.86); }
+  #eye svg { width: 20px; height: 20px; display: block; }
+  #eye .off { display: none; }
+  body.ui-hidden #eye .off { display: block; }
+  body.ui-hidden #eye .on  { display: none; }
+  body.brat #eye { color: #000; }
+
+  /* Idle: the chrome recedes so the cover is clean. */
+  body.idle #eye { opacity: 0; }
+  body.idle #bar { opacity: 0; transform: translateX(-50%) translateY(10px); }
+
+  /* Toggled off: chrome gone until you tap the toggle again. */
+  body.ui-hidden #bar,
+  body.ui-hidden #help {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(14px);
+  }
+
+  #bar {
+    transition: opacity .35s ease, transform .35s cubic-bezier(.22, 1, .36, 1);
+  }
+
   #bar button {
     appearance: none;
     -webkit-appearance: none;
@@ -158,6 +205,80 @@
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  /* ---- Motion ----------------------------------------------------------
+     Colour modes wipe in as a circle from the button you tapped (View
+     Transitions); buttons spring and ripple; blur and clear animate. */
+  #bar button {
+    position: relative;
+    overflow: hidden;
+    transition: opacity .2s ease,
+                background .25s ease,
+                transform .3s cubic-bezier(.22, 1.6, .36, 1);
+  }
+  #bar button:active { transform: scale(.86); }
+
+  @keyframes pop {
+    0%   { transform: scale(1); }
+    38%  { transform: scale(1.16); }
+    100% { transform: scale(1); }
+  }
+  #bar button.pop { animation: pop .44s cubic-bezier(.22, 1.4, .36, 1); }
+
+  /* Ripple from the touch point */
+  .rip {
+    position: absolute;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: .22;
+    transform: scale(0);
+    pointer-events: none;
+    animation: rip .55s cubic-bezier(.22, 1, .36, 1) forwards;
+  }
+  @keyframes rip {
+    to { transform: scale(2.6); opacity: 0; }
+  }
+
+  /* Blur toggles smoothly instead of snapping */
+  #message { transition: filter .4s cubic-bezier(.4, 0, .2, 1); }
+
+  @keyframes clearOut {
+    to { transform: scale(.84) translateY(10px); opacity: 0; filter: blur(18px); }
+  }
+  @keyframes clearIn {
+    from { transform: scale(1.06); opacity: 0; }
+  }
+  #message.clearing { animation: clearOut .28s cubic-bezier(.4, 0, 1, 1) forwards; }
+  #message.cleared  { animation: clearIn .34s cubic-bezier(.22, 1, .36, 1); }
+
+  /* Shutter flash on save */
+  #flash {
+    position: fixed;
+    inset: 0;
+    z-index: 9;
+    pointer-events: none;
+    background: #fff;
+    opacity: 0;
+  }
+  #flash.go { animation: flash .45s ease-out; }
+  @keyframes flash {
+    0%   { opacity: .9; }
+    100% { opacity: 0; }
+  }
+
+  /* The circle wipe is driven from JS; kill the default crossfade. */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #bar button, #message, html, body { transition-duration: .01ms !important; }
+    #bar button.pop, .rip, #message.clearing, #message.cleared, #flash.go {
+      animation: none !important;
+    }
+  }
+
   /* brat mode — lime green cover */
   body.brat { background: #8ace00 !important; }
   body.brat #message { color: #000000 !important; caret-color: #000000; }
@@ -171,6 +292,7 @@
          autocorrect="off" autocapitalize="none" enterkeyhint="done"></div>
   </div>
   <div id="toast"></div>
+  <div id="flash"></div>
 
   <div id="bar" role="toolbar" aria-label="Controls">
     <button type="button" data-act="brat"   aria-pressed="false" title="brat green">brat</button>
@@ -181,12 +303,24 @@
     <button type="button" data-act="clear"  title="clear">clear</button>
   </div>
 
+  <button id="eye" type="button" aria-label="Hide controls" aria-pressed="false" title="hide controls">
+    <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M1.5 12S5 5.5 12 5.5 22.5 12 22.5 12 19 18.5 12 18.5 1.5 12 1.5 12Z"/>
+      <circle cx="12" cy="12" r="3.2"/>
+    </svg>
+    <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M9.9 5.7A9.6 9.6 0 0 1 12 5.5c7 0 10.5 6.5 10.5 6.5a17 17 0 0 1-3.5 4.2M6.2 7.4A17 17 0 0 0 1.5 12S5 18.5 12 18.5a9.9 9.9 0 0 0 4.2-.9"/>
+      <path d="M3 3l18 18"/>
+    </svg>
+  </button>
+
   <div id="help">type &nbsp;·&nbsp; <b>Tab</b> fullscreen &nbsp;·&nbsp; <b>⌘/Ctrl+B</b> brat &nbsp;·&nbsp; <b>⌘/Ctrl+↵</b> invert &nbsp;·&nbsp; <b>⌘/Ctrl+K</b> blur &nbsp;·&nbsp; <b>⌘/Ctrl+S</b> save webp &nbsp;·&nbsp; <b>Esc</b> clear</div>
 
 <script>
   const stage = document.getElementById('stage');
   const msg   = document.getElementById('message');
   const bar   = document.getElementById('bar');
+  const eye   = document.getElementById('eye');
 
   // Touch devices get the button bar; pointer devices keep the keyboard hints.
   const isTouch = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
@@ -237,6 +371,7 @@
     if (document.body.classList.contains('touch')) {
       bar.style.bottom = 'auto';
       bar.style.top = (offY + h - bar.offsetHeight - 10) + 'px';
+      eye.style.top = (offY + 12) + 'px';
     }
     fit();
   }
@@ -275,7 +410,7 @@
   // stops iOS from opening the keyboard. There, a plain tap does the work.
   if (isTouch) {
     document.addEventListener('click', (e) => {
-      if (e.target.closest('#bar')) return;
+      if (e.target.closest('#bar') || e.target.closest('#eye')) return;
       focusMsg();                    // inside the tap gesture, so iOS obeys
     });
   } else {
@@ -293,28 +428,98 @@
     layout();
   });
 
+  // ---- Motion -----------------------------------------------------------
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Run a colour change as a circular wipe growing from (x, y). View
+  // Transitions snapshot the old frame, so the whole cover — background, text
+  // colour, button colours — wipes as one piece instead of crossfading.
+  function reveal(fn, x, y) {
+    if (reduceMotion || !document.startViewTransition) { fn(); return; }
+
+    const w = window.innerWidth, h = window.innerHeight;
+    if (x == null) { x = w / 2; y = h / 2; }
+    // Radius out to the furthest corner, so the circle always covers the screen.
+    const r = Math.hypot(Math.max(x, w - x), Math.max(y, h - y));
+
+    const t = document.startViewTransition(fn);
+    t.ready.then(() => {
+      document.documentElement.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+        {
+          duration: 560,
+          easing: 'cubic-bezier(.22, 1, .36, 1)',
+          pseudoElement: '::view-transition-new(root)',
+        }
+      );
+    }).catch(() => {});
+  }
+
+  function ripple(btn, e) {
+    if (reduceMotion) return;
+    const r = btn.getBoundingClientRect();
+    const size = Math.max(r.width, r.height);
+    const el = document.createElement('span');
+    el.className = 'rip';
+    el.style.width = el.style.height = size + 'px';
+    el.style.left = ((e.clientX ?? r.left + r.width / 2) - r.left - size / 2) + 'px';
+    el.style.top  = ((e.clientY ?? r.top + r.height / 2) - r.top - size / 2) + 'px';
+    btn.appendChild(el);
+    setTimeout(() => el.remove(), 600);
+  }
+
+  function pop(btn) {
+    if (!btn || reduceMotion) return;
+    btn.classList.remove('pop');
+    void btn.offsetWidth;          // restart the animation
+    btn.classList.add('pop');
+  }
+
   // ---- Actions ----------------------------------------------------------
   let inverted = false, blurOn = true;
 
-  function setInvert(on) {
-    inverted = on;
-    document.documentElement.style.setProperty('--bg', on ? '#000000' : '#ffffff');
-    document.documentElement.style.setProperty('--fg', on ? '#ffffff' : '#000000');
-    syncBar();
+  function setInvert(on, x, y) {
+    reveal(() => {
+      inverted = on;
+      document.documentElement.style.setProperty('--bg', on ? '#000000' : '#ffffff');
+      document.documentElement.style.setProperty('--fg', on ? '#ffffff' : '#000000');
+      syncBar();
+    }, x, y);
   }
   function setBlur(on) {
     blurOn = on;
     document.documentElement.style.setProperty('--blur', on ? '2px' : '0px');
     syncBar();
   }
-  function toggleBrat() {
-    document.body.classList.toggle('brat');
-    syncBar();
-    fit();
+  function toggleBrat(x, y) {
+    reveal(() => {
+      document.body.classList.toggle('brat');
+      syncBar();
+      fit();
+    }, x, y);
   }
   function clearText() {
-    msg.textContent = '';
-    fit();
+    if (reduceMotion || !msg.textContent) {
+      msg.textContent = '';
+      fit();
+      return;
+    }
+    msg.classList.add('clearing');
+    setTimeout(() => {
+      msg.classList.remove('clearing');
+      msg.textContent = '';
+      fit();
+      msg.classList.add('cleared');
+      setTimeout(() => msg.classList.remove('cleared'), 360);
+    }, 280);
+  }
+
+  function flash() {
+    if (reduceMotion) return;
+    const el = document.getElementById('flash');
+    el.classList.remove('go');
+    void el.offsetWidth;
+    el.classList.add('go');
   }
 
   // Keep the address bar / status bar colour matching the cover.
@@ -333,19 +538,42 @@
   }
 
   // Buttons must not steal focus, or the keyboard closes on every tap.
-  bar.addEventListener('pointerdown', (e) => e.preventDefault());
+  bar.addEventListener('pointerdown', (e) => {
+    e.preventDefault();                       // keep the keyboard open
+    const btn = e.target.closest('button');
+    if (btn) ripple(btn, e);
+  });
   bar.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
     e.preventDefault();
+    const r = btn.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    pop(btn);
     switch (btn.dataset.act) {
-      case 'brat':   toggleBrat(); break;
-      case 'invert': setInvert(!inverted); break;
+      case 'brat':   toggleBrat(cx, cy); break;
+      case 'invert': setInvert(!inverted, cx, cy); break;
       case 'blur':   setBlur(!blurOn); break;
       case 'full':   toggleFullscreen(); break;
-      case 'save':   exportImage(); break;
+      case 'save':   flash(); exportImage(); break;
       case 'clear':  clearText(); break;
     }
+    poke();
+  });
+
+  // ---- Hide/show the chrome ---------------------------------------------
+  function setUiHidden(on) {
+    document.body.classList.toggle('ui-hidden', on);
+    eye.setAttribute('aria-pressed', String(on));
+    eye.setAttribute('aria-label', on ? 'Show controls' : 'Hide controls');
+    eye.title = on ? 'show controls' : 'hide controls';
+  }
+  eye.addEventListener('pointerdown', (e) => { e.preventDefault(); ripple(eye, e); });
+  eye.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();                      // not a "tap anywhere" reveal
+    pop(eye);
+    setUiHidden(!document.body.classList.contains('ui-hidden'));
     poke();
   });
 
