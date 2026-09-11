@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+<meta name="theme-color" content="#ffffff" id="themecolor" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <title>Live Message</title>
 <style>
   :root {
@@ -19,12 +23,17 @@
     background: var(--bg);
     cursor: default;
     -webkit-font-smoothing: antialiased;
+    -webkit-text-size-adjust: 100%;   /* iOS must not resize our fitted text */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;       /* no double-tap zoom, pinch still works */
+    overscroll-behavior: none;        /* no rubber-band / pull-to-refresh */
     transition: background 0.15s ease;
   }
 
-  /* Square "cover" area, centered on screen */
+  /* Square "cover" area. JS positions and sizes it against the visual
+     viewport so the on-screen keyboard never covers the text. */
   #stage {
-    position: absolute;
+    position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -41,7 +50,9 @@
     width: 100%;
     color: var(--fg);
     font-weight: 500;
-    font-family: "Arial Narrow", Arial, sans-serif;
+    /* Arial Narrow is desktop-only; condensed fallbacks keep phones close. */
+    font-family: "Arial Narrow", "Helvetica Neue Condensed", "Roboto Condensed", "Liberation Sans Narrow", Arial, sans-serif;
+    font-stretch: 75%;
     font-size: 100px;                 /* JS overrides this to fit */
     line-height: 0.9;
     text-align: justify;
@@ -62,7 +73,7 @@
 
   #help {
     position: fixed;
-    bottom: 14px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
     z-index: 5;
@@ -76,12 +87,55 @@
   }
   body.idle #help { opacity: 0; }
 
+  /* ---- Touch controls -------------------------------------------------
+     Every shortcut is keyboard-only, so a phone can reach nothing. This bar
+     is the touch equivalent. JS positions it against the visual viewport so
+     it rides above the keyboard instead of hiding behind it. */
+  #bar {
+    position: fixed;
+    left: 50%;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    z-index: 6;
+    display: none;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 999px;
+    background: rgba(127, 127, 127, 0.16);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    user-select: none;
+    -webkit-user-select: none;
+    max-width: calc(100vw - 16px);
+  }
+  body.touch #bar { display: flex; }
+  body.touch #help { display: none; }
+
+  #bar button {
+    appearance: none;
+    -webkit-appearance: none;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--fg);
+    font: 600 13px/1 system-ui, -apple-system, sans-serif;
+    letter-spacing: 0.01em;
+    padding: 11px 13px;
+    min-width: 44px;          /* 44px touch target */
+    min-height: 44px;
+    opacity: 0.62;
+    cursor: pointer;
+    transition: opacity 0.15s ease, background 0.15s ease;
+  }
+  #bar button:active { background: rgba(127, 127, 127, 0.22); }
+  #bar button[aria-pressed="true"] { opacity: 1; background: rgba(127, 127, 127, 0.26); }
+
   #toast {
     position: fixed;
-    top: 16px;
+    top: calc(16px + env(safe-area-inset-top));
     left: 50%;
     transform: translateX(-50%) translateY(-20px);
-    z-index: 6;
+    z-index: 7;
     background: rgba(0,0,0,0.82);
     color: #fff;
     font: 13px/1 system-ui, sans-serif;
@@ -90,6 +144,8 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.25s ease, transform 0.25s ease;
+    max-width: calc(100vw - 32px);
+    text-align: center;
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
@@ -97,18 +153,39 @@
   body.brat { background: #8ace00 !important; }
   body.brat #message { color: #000000 !important; caret-color: #000000; }
   body.brat #message:empty::before { content: "brat"; }
+  body.brat #bar button { color: #000000; }
 </style>
 </head>
 <body>
   <div id="stage">
-    <div id="message" contenteditable="true" autofocus spellcheck="false"></div>
+    <div id="message" contenteditable="true" autofocus spellcheck="false"
+         autocorrect="off" autocapitalize="none" enterkeyhint="done"></div>
   </div>
   <div id="toast"></div>
+
+  <div id="bar" role="toolbar" aria-label="Controls">
+    <button type="button" data-act="brat"   aria-pressed="false" title="brat green">brat</button>
+    <button type="button" data-act="invert" aria-pressed="false" title="invert">invert</button>
+    <button type="button" data-act="blur"   aria-pressed="true"  title="blur">blur</button>
+    <button type="button" data-act="full"   aria-pressed="false" title="fullscreen" hidden>full</button>
+    <button type="button" data-act="save"   title="save image">save</button>
+    <button type="button" data-act="clear"  title="clear">clear</button>
+  </div>
+
   <div id="help">type &nbsp;·&nbsp; <b>Tab</b> fullscreen &nbsp;·&nbsp; <b>⌘/Ctrl+B</b> brat &nbsp;·&nbsp; <b>⌘/Ctrl+↵</b> invert &nbsp;·&nbsp; <b>⌘/Ctrl+K</b> blur &nbsp;·&nbsp; <b>⌘/Ctrl+S</b> save webp &nbsp;·&nbsp; <b>Esc</b> clear</div>
 
 <script>
   const stage = document.getElementById('stage');
   const msg   = document.getElementById('message');
+  const bar   = document.getElementById('bar');
+
+  // Touch devices get the button bar; pointer devices keep the keyboard hints.
+  const isTouch = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+  if (isTouch) document.body.classList.add('touch');
+
+  // iPhone Safari has no element fullscreen; don't show a button that can't work.
+  const canFullscreen = !!document.documentElement.requestFullscreen;
+  if (canFullscreen) bar.querySelector('[data-act="full"]').hidden = false;
 
   // Scale the text so the block fills the square box — biggest size that
   // still fits both width (no word overflow) and height (no clipping).
@@ -127,6 +204,41 @@
     }
     msg.style.fontSize = best + 'px';
   }
+
+  // ---- Visual-viewport layout ------------------------------------------
+  // A fixed, vmin-sized box is measured against the *layout* viewport, so an
+  // open keyboard hides the text behind it. Size and centre everything on the
+  // visual viewport instead, keeping clear of the button bar.
+  const vv = window.visualViewport;
+  function layout() {
+    const w    = vv ? vv.width    : window.innerWidth;
+    const h    = vv ? vv.height   : window.innerHeight;
+    const offX = vv ? vv.offsetLeft : 0;
+    const offY = vv ? vv.offsetTop  : 0;
+
+    const barH  = document.body.classList.contains('touch') ? bar.offsetHeight + 20 : 0;
+    const avail = Math.max(h - barH, 120);
+    const side  = Math.min(w, avail) * 0.9;
+
+    stage.style.width  = side + 'px';
+    stage.style.height = side + 'px';
+    stage.style.left   = (offX + w / 2) + 'px';
+    stage.style.top    = (offY + avail / 2) + 'px';
+
+    if (document.body.classList.contains('touch')) {
+      bar.style.bottom = 'auto';
+      bar.style.top = (offY + h - bar.offsetHeight - 10) + 'px';
+    }
+    fit();
+  }
+  document.addEventListener('fullscreenchange', () => { syncBar(); layout(); });
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', () => setTimeout(layout, 120));
+  if (vv) {
+    vv.addEventListener('resize', layout);
+    vv.addEventListener('scroll', layout);
+  }
+
   msg.addEventListener('input', fit);
   // Paste as plain text — rich HTML would break the layout and export.
   msg.addEventListener('paste', (e) => {
@@ -134,11 +246,9 @@
     const text = (e.clipboardData || window.clipboardData).getData('text/plain');
     document.execCommand('insertText', false, text);
   });
-  window.addEventListener('resize', fit);
 
-  // Keep focus on the text so you can just start typing.
-  function focusMsg() {
-    msg.focus();
+  // Keep the caret at the end of the text.
+  function caretToEnd() {
     const r = document.createRange();
     r.selectNodeContents(msg);
     r.collapse(false);
@@ -146,35 +256,104 @@
     s.removeAllRanges();
     s.addRange(r);
   }
-  document.addEventListener('mousedown', (e) => {
-    if (e.target !== msg) { e.preventDefault(); focusMsg(); }
+  function focusMsg() {
+    msg.focus();
+    caretToEnd();
+  }
+
+  // Pointer devices: swallow the mousedown so focus never leaves the text.
+  // Touch devices must NOT do this — cancelling the gesture is exactly what
+  // stops iOS from opening the keyboard. There, a plain tap does the work.
+  if (isTouch) {
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#bar')) return;
+      focusMsg();                    // inside the tap gesture, so iOS obeys
+    });
+  } else {
+    document.addEventListener('mousedown', (e) => {
+      if (e.target !== msg) { e.preventDefault(); focusMsg(); }
+    });
+  }
+
+  window.addEventListener('load', () => {
+    if (!isTouch) focusMsg();        // autofocus is ignored on mobile anyway
+    layout();
   });
-  window.addEventListener('load', () => { focusMsg(); fit(); });
+
+  // ---- Actions ----------------------------------------------------------
+  let inverted = false, blurOn = true;
+
+  function setInvert(on) {
+    inverted = on;
+    document.documentElement.style.setProperty('--bg', on ? '#000000' : '#ffffff');
+    document.documentElement.style.setProperty('--fg', on ? '#ffffff' : '#000000');
+    syncBar();
+  }
+  function setBlur(on) {
+    blurOn = on;
+    document.documentElement.style.setProperty('--blur', on ? '2px' : '0px');
+    syncBar();
+  }
+  function toggleBrat() {
+    document.body.classList.toggle('brat');
+    syncBar();
+    fit();
+  }
+  function clearText() {
+    msg.textContent = '';
+    fit();
+  }
+
+  // Keep the address bar / status bar colour matching the cover.
+  function syncBar() {
+    const bratOn = document.body.classList.contains('brat');
+    document.getElementById('themecolor').content =
+      bratOn ? '#8ace00' : (inverted ? '#000000' : '#ffffff');
+    const set = (act, on) => {
+      const b = bar.querySelector(`[data-act="${act}"]`);
+      if (b) b.setAttribute('aria-pressed', String(on));
+    };
+    set('brat', bratOn);
+    set('invert', inverted);
+    set('blur', blurOn);
+    set('full', !!document.fullscreenElement);
+  }
+
+  // Buttons must not steal focus, or the keyboard closes on every tap.
+  bar.addEventListener('pointerdown', (e) => e.preventDefault());
+  bar.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    e.preventDefault();
+    switch (btn.dataset.act) {
+      case 'brat':   toggleBrat(); break;
+      case 'invert': setInvert(!inverted); break;
+      case 'blur':   setBlur(!blurOn); break;
+      case 'full':   toggleFullscreen(); break;
+      case 'save':   exportImage(); break;
+      case 'clear':  clearText(); break;
+    }
+    poke();
+  });
 
   // Shortcuts (non-letter / modified keys so they don't clash with typing)
-  let inverted = false, blurOn = true;
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       e.preventDefault();
       if (document.fullscreenElement) return;  // Esc exits fullscreen; don't also clear
-      msg.textContent = '';
-      fit();
+      clearText();
     } else if (e.key === 'Tab') {
       e.preventDefault();
       toggleFullscreen();
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
-      inverted = !inverted;
-      document.documentElement.style.setProperty('--bg', inverted ? '#000000' : '#ffffff');
-      document.documentElement.style.setProperty('--fg', inverted ? '#ffffff' : '#000000');
+      setInvert(!inverted);
     } else if ((e.metaKey || e.ctrlKey) && (e.key === 'b' || e.key === 'B')) {
       e.preventDefault();
-      document.body.classList.toggle('brat');
-      fit();
+      toggleBrat();
     } else if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault();
-      blurOn = !blurOn;
-      document.documentElement.style.setProperty('--blur', blurOn ? '2px' : '0px');
+      setBlur(!blurOn);
     } else if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
       e.preventDefault();
       exportImage();
@@ -212,7 +391,7 @@
     const bg = getComputedStyle(document.body).backgroundColor;
     const fg = ms.color;
     const weight = ms.fontWeight || '500';
-    const family = '"Arial Narrow", Arial, sans-serif';
+    const family = ms.fontFamily || 'Arial, sans-serif';
     const LH = 0.9;                 // matches CSS line-height
 
     ctx.fillStyle = bg;
@@ -241,15 +420,15 @@
       };
 
       // Binary-search the largest font that fits the square.
-      let lo = 8, hi = 4000, best = 8, layout = null;
+      let lo = 8, hi = 4000, best = 8, lay = null;
       for (let i = 0; i < 24; i++) {
         const mid = (lo + hi) / 2;
         const L = wrap(mid);
-        if (L.maxWord <= inner && L.height <= inner) { best = mid; layout = L; lo = mid; }
+        if (L.maxWord <= inner && L.height <= inner) { best = mid; lay = L; lo = mid; }
         else hi = mid;
       }
       const fontPx = best;
-      const { lines, sp } = layout || wrap(best);
+      const { lines, sp } = lay || wrap(best);
 
       // Draw — justified on every line, including the last (text-align-last).
       ctx.font = `${weight} ${fontPx}px ${family}`;
@@ -285,9 +464,29 @@
     canvas.toBlob((blob) => {
       if (!blob) { toast('export failed'); return; }
       const webp = blob.type === 'image/webp';
-      download(blob, base + (webp ? '.webp' : '.png'));
-      toast('saved ' + base + (webp ? '.webp' : '.png') + '  ·  ' + size + '×' + size);
+      const name = base + (webp ? '.webp' : '.png');
+      saveBlob(blob, name, size);
     }, 'image/webp', 0.98);
+  }
+
+  // Mobile browsers treat <a download> poorly — iOS Safari often opens the
+  // file instead of saving it. The share sheet is the native route, with the
+  // download kept as the fallback.
+  async function saveBlob(blob, name, size) {
+    if (isTouch && navigator.canShare) {
+      try {
+        const file = new File([blob], name, { type: blob.type });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file] });
+          return;                      // the sheet is its own confirmation
+        }
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;   // user dismissed
+        /* fall through to download */
+      }
+    }
+    download(blob, name);
+    toast('saved ' + name + '  ·  ' + size + '×' + size);
   }
 
   function slugify(s) {
@@ -318,10 +517,11 @@
     clearTimeout(idleTimer);
     idleTimer = setTimeout(() => document.body.classList.add('idle'), 2500);
   }
-  ['mousemove', 'keydown', 'input'].forEach(ev => document.addEventListener(ev, poke));
+  ['mousemove', 'keydown', 'input', 'touchstart'].forEach(ev => document.addEventListener(ev, poke));
   poke();
 
-  fit();
+  syncBar();
+  layout();
 </script>
 </body>
 </html>
