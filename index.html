@@ -9,23 +9,15 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <title>Live Message</title>
 <style>
-  /* Self-hosted so every device renders the same face. Arial Narrow is
-     desktop-only, and the platform fallbacks each picked a different font. */
+  /* Arial Narrow, self-hosted. Installed copies win via local(); phones,
+     which ship no Arial Narrow at all, download the subset. */
   @font-face {
-    font-family: 'Archivo Narrow';
+    font-family: 'Arial Narrow';
     font-style: normal;
     font-weight: 400 700;
     font-display: block;          /* block, not swap — a reflow would refit the text */
-    src: url(fonts/archivo-narrow-latin.woff2) format('woff2');
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-  }
-  @font-face {
-    font-family: 'Archivo Narrow';
-    font-style: normal;
-    font-weight: 400 700;
-    font-display: block;
-    src: url(fonts/archivo-narrow-latin-ext.woff2) format('woff2');
-    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+    src: local('Arial Narrow'), local('ArialNarrow'),
+         url(fonts/arial-narrow.woff2) format('woff2');
   }
 
   :root {
@@ -69,7 +61,7 @@
     width: 100%;
     color: var(--fg);
     font-weight: 500;
-    font-family: "Archivo Narrow", "Arial Narrow", Arial, sans-serif;
+    font-family: "Arial Narrow", Arial, sans-serif;
     font-size: 100px;                 /* JS overrides this to fit */
     line-height: 0.9;
     text-align: justify;
