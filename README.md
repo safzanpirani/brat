@@ -5,6 +5,7 @@ A dead-simple, fullscreen **live message** webapp — type and it fills the scre
 - Auto-fits text to a square box (scales font down as you type more)
 - **bratgenerator-style** justified spacing (`text-align-last: justify`) + blur
 - White / brat-green / inverted color modes
+- Self-hosted Archivo Narrow so every device renders the same face
 
 ## Mobile
 On phones and tablets a button bar replaces the shortcuts — brat, invert, blur,
