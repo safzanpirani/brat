@@ -478,13 +478,11 @@
   // ---- Actions ----------------------------------------------------------
   let inverted = false, blurOn = true;
 
-  function setInvert(on, x, y) {
-    reveal(() => {
-      inverted = on;
-      document.documentElement.style.setProperty('--bg', on ? '#000000' : '#ffffff');
-      document.documentElement.style.setProperty('--fg', on ? '#ffffff' : '#000000');
-      syncBar();
-    }, x, y);
+  function setInvert(on) {
+    inverted = on;
+    document.documentElement.style.setProperty('--bg', on ? '#000000' : '#ffffff');
+    document.documentElement.style.setProperty('--fg', on ? '#ffffff' : '#000000');
+    syncBar();
   }
   function setBlur(on) {
     blurOn = on;
@@ -552,7 +550,7 @@
     pop(btn);
     switch (btn.dataset.act) {
       case 'brat':   toggleBrat(cx, cy); break;
-      case 'invert': setInvert(!inverted, cx, cy); break;
+      case 'invert': setInvert(!inverted); break;
       case 'blur':   setBlur(!blurOn); break;
       case 'full':   toggleFullscreen(); break;
       case 'save':   flash(); exportImage(); break;
